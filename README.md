@@ -1,81 +1,222 @@
 # IT Service Desk Ticket Management & Automation
 
-A portfolio project demonstrating an IT help desk solution built with Microsoft SharePoint, Power Automate, and Power Apps. The solution is designed to support ticket submission, assignment, notifications, priority-based escalation, SLA monitoring, and technician workflows.
+A practical IT service desk automation project built with **Microsoft SharePoint** and **Microsoft Power Automate**.
 
-## Current Architecture
+The solution models a small internal IT help desk where SharePoint stores tickets and Power Automate handles technician notifications, critical-ticket escalation, SLA monitoring, and requester resolution notifications.
 
-- **SharePoint** — ticket data store and IT Help Desk site
-- **Power Automate** — notification, escalation, and SLA automation
-- **Power Apps** — planned employee ticket submission and technician interface
-- **Microsoft Teams** — planned support-team integration
-- **Power BI** — optional reporting and service metrics dashboard
+> **Scope:** This portfolio version intentionally focuses on SharePoint + Power Automate. Power Apps, Teams, and Power BI are out of scope for the current implementation.
 
-## Implemented So Far
+## What This Project Demonstrates
 
-### SharePoint IT Help Desk
+- SharePoint list and view design for IT service management
+- Event-driven Power Automate flows
+- Conditional routing and priority-based escalation
+- Scheduled SLA monitoring
+- OData filtering
+- Power Automate expressions for date/time comparison
+- Dynamic Outlook email notifications
+- Reminder-state tracking to prevent repeated SLA emails
+- Runtime troubleshooting using Power Automate run history
+- End-to-end workflow testing and validation
 
-Created an **IT Help Desk** SharePoint site with a **Tickets** list containing fields for:
+## Architecture
+
+```text
+                         SharePoint
+                     ┌─────────────────┐
+                     │  Tickets List   │
+                     │                 │
+                     │ Issue           │
+                     │ Description     │
+                     │ Priority        │
+                     │ Status          │
+                     │ Assigned To     │
+                     │ Requester       │
+                     │ Resolution      │
+                     │ Resolved Date  │
+                     │ SLA Due Date    │
+                     │ SLA Reminder    │
+                     └────────┬────────┘
+                              │
+              ┌───────────────┼────────────────┐
+              │               │                │
+              ▼               ▼                ▼
+       New Ticket       Critical Ticket   Completed Ticket
+       Notification     Escalation        Resolution Notice
+              │               │                │
+              ▼               ▼                ▼
+       Assigned tech     Assigned tech      Requester
+
+                     Scheduled SLA Flow
+                           │
+                      Every 1 hour
+                           ▼
+                     Get eligible items
+                           ▼
+                      Apply to each
+                           ▼
+                        SLA check
+                           ▼
+                   Send reminder + flag
+```
+
+## Technology Stack
+
+| Technology | Role |
+|---|---|
+| Microsoft SharePoint | Ticket data store and operational views |
+| Microsoft Power Automate | Workflow orchestration and automation |
+| Microsoft 365 Outlook | Automated email notifications |
+| OData | SharePoint item filtering |
+| Power Automate expressions | Date/time and Choice-field logic |
+
+## SharePoint Data Model
+
+The `Tickets` list contains:
 
 - Issue
-- Issue description
 - Quick steps
+- Issue description
 - Priority
 - Status
 - Assigned to
-- Requester
-- Category
 - Associated files
 - Related issue
+- Category
+- Requester
 - Resolution
 - Resolved Date
 - SLA Due Date
 - SLA Reminder Sent
 
-Configured views include Open Tickets, My Tickets, and Critical Tickets.
+Views include **Open Tickets**, **My Tickets**, and **Critical Tickets**.
 
-### Power Automate Flows
+![SharePoint Tickets list](docs/screenshots/01-sharepoint-tickets-list.png)
 
-#### 1. New Ticket Notification
+See [SharePoint Data Model](docs/sharepoint-schema.md).
 
-**Trigger:** SharePoint — When an item is created
+## Power Automate Flows
 
-Automatically emails the assigned technician when a new ticket is created. The notification includes the issue, description, priority, status, category, and requester.
-
-#### 2. Critical Ticket Escalation
+### 1. New Ticket Notification
 
 **Trigger:** SharePoint — When an item is created
 
-Checks whether the ticket priority is **Critical**. Critical tickets generate a high-importance escalation email requiring immediate attention.
+Emails the assigned technician when a new ticket is created. The notification contains issue, description, priority, status, category, and requester information.
 
-#### 3. SLA Overdue Reminder
+**Status:** Complete and tested.
 
-**Trigger:** Scheduled recurrence — every hour
+### 2. Critical Ticket Escalation
 
-Retrieves tickets and evaluates SLA due dates so overdue unresolved tickets can receive a reminder. The `SLA Reminder Sent` field is used to prevent repeated reminders for the same ticket.
+**Trigger:** SharePoint — When an item is created
 
-This flow is currently under construction.
+**Condition:** `Priority Value = Critical`
 
-## Planned Components
+Critical tickets generate a high-importance email to the assigned technician.
 
-- Employee-facing Power Apps ticket submission form
-- Technician dashboard in Power Apps
-- Additional status and resolution notifications
-- Microsoft Teams support notifications and collaboration
-- Optional Power BI help desk analytics dashboard
-- Project documentation and screenshots
+**Status:** Complete and tested.
 
-## Technologies
+### 3. SLA Overdue Reminder
 
-**Microsoft Power Platform:** Power Apps, Power Automate, SharePoint
+**Trigger:** Recurrence — every 1 hour
 
-**Microsoft 365:** Microsoft Teams, Outlook
+The flow retrieves eligible tickets, processes them with `Apply to each`, checks whether the SLA deadline has passed, sends an overdue reminder, and sets `SLA Reminder Sent = Yes`.
 
-**Planned Analytics:** Power BI
+OData filter:
+
+```text
+SLADueDate ne null and Status ne 'Completed' and SLAReminderSent eq 0
+```
+
+Date comparison:
+
+```text
+ticks(item()?['SLADueDate']) <= ticks(utcNow())
+```
+
+**Status:** Complete and successfully tested.
+
+![Successful SLA run](docs/screenshots/05-sla-overdue-success.png)
+
+### 4. Ticket Resolution Notification
+
+**Trigger:** SharePoint — When an item is created or modified
+
+**Condition:** Status equals `Completed`
+
+**Action:** Send an email to the Requester containing the issue, description, category, priority, resolution, and resolved date.
+
+**Status:** Complete and successfully tested.
+
+![Successful resolution flow](docs/screenshots/07-resolution-flow-success.png)
+
+## Testing & Validation
+
+Sample test tickets were used to validate the different paths:
+
+- `Test - Wi-Fi Connection`
+- `Test - Password Reset`
+- `Test - Critical Server Issue`
+- `Test - Critical Escalation 2`
+- `Test - SLA Overdue`
+
+| Scenario | Expected result |
+|---|---|
+| New ticket created | Assigned technician receives notification |
+| Critical ticket created | High-importance escalation is sent |
+| Non-critical ticket created | Critical branch does not execute |
+| Overdue unresolved ticket | SLA reminder is sent and flag is updated |
+| Completed ticket | Requester receives resolution notification |
+
+The project was validated through Power Automate run history, email delivery, and SharePoint record updates.
+
+## Implementation Journey
+
+The project was built incrementally and required troubleshooting several real Power Automate issues:
+
+- Renamed SharePoint `Title` field initially produced a blank Issue value in email output.
+- Critical Choice-field condition initially did not route correctly.
+- SLA comparison failed when blank SLA Due Dates produced a `Null` versus `String` type mismatch.
+- The resolution flow initially displayed a broken `?Status.Value` reference.
+- The first resolution email exposed incomplete test data because Resolution and Resolved Date were blank.
+
+Each issue was diagnosed from runtime behavior and corrected. The complete troubleshooting journey is documented in [Implementation Journey](docs/implementation-journey.md).
 
 ## Project Status
 
-The SharePoint data layer and core Power Automate notification/escalation workflows are implemented. SLA monitoring is in progress, followed by the Power Apps user interface and additional integrations.
+| Component | Status |
+|---|---|
+| SharePoint IT Help Desk site | Complete |
+| Tickets list/data model | Complete |
+| Open Tickets view | Complete |
+| My Tickets view | Complete |
+| Critical Tickets view | Complete |
+| New Ticket Notification | Complete |
+| Critical Ticket Escalation | Complete |
+| SLA Overdue Reminder | Complete |
+| Ticket Resolution Notification | Complete |
+| Documentation | Complete |
+| Power Apps | Out of scope |
+| Teams | Out of scope |
+| Power BI | Out of scope |
 
-## Security & Portfolio Notes
+## Repository Structure
 
-This repository contains documentation and configuration descriptions only. No tenant URLs, credentials, connection details, personal information, or secrets are included.
+```text
+.
+├── README.md
+├── .gitignore
+└── docs/
+    ├── architecture.md
+    ├── implementation-journey.md
+    ├── power-automate-flows.md
+    ├── screenshots.md
+    ├── sharepoint-schema.md
+    ├── testing-and-validation.md
+    └── screenshots/
+```
+
+## Security & Privacy
+
+This repository should contain documentation and sanitized screenshots only.
+
+Do not publish passwords, API keys, authentication tokens, connection references, personal email addresses, or sensitive tenant information. Use synthetic test data and crop/redact private information from screenshots.
