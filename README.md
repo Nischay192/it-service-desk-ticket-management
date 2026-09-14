@@ -106,26 +106,19 @@ it-service-desk-ticket-management/
 ├── README.md
 ├── .gitignore
 ├── screenshots/
-│   ├── sharepoint-ticket-list.png
-│   ├── new-ticket-flow.png
-│   ├── critical-ticket-flow.png
-│   ├── sla-overdue-flow.png
-│   ├── resolution-flow.png
-│   └── resolution-email.png
 └── docs/
     ├── architecture.md
     ├── implementation-journey.md
     ├── power-automate-flows.md
-    ├── sharepoint-schema.md
-    └── testing-and-validation.md
+    └── sharepoint-schema.md
 ```
 
 ## Documentation
 
+- [Architecture](docs/architecture.md) — high-level workflow and system design
 - [Power Automate Flows](docs/power-automate-flows.md) — detailed workflow implementation
 - [Implementation Journey](docs/implementation-journey.md) — troubleshooting and technical reasoning
 - [SharePoint Data Model](docs/sharepoint-schema.md) — data model and design rationale
-- [Testing & Validation](docs/testing-and-validation.md) — test scenarios and results
 
 ## Privacy
 
