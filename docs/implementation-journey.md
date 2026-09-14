@@ -1,187 +1,88 @@
 # Implementation Journey
 
-## Project Goal
+This document captures the most important engineering decisions and troubleshooting steps from building the service desk automation.
 
-Build a practical IT service desk automation portfolio project using **Microsoft SharePoint + Power Automate**. The solution models ticket intake, technician notification, critical escalation, SLA monitoring, and requester resolution notifications.
+## 1. Establishing the ticket workflow
 
-The project was intentionally kept focused on Power Automate rather than expanding into Power Apps, Teams, or Power BI.
+I started by designing SharePoint as the system of record for the ticket lifecycle. The data model supports assignment, priority, status, requester communication, resolution, and SLA tracking.
 
-## 1. SharePoint Foundation
+The automation was then built around the events that matter to an IT support team: a ticket being created, a critical ticket being raised, an SLA becoming overdue, and a ticket being completed.
 
-Created an **IT Help Desk** SharePoint site with a `Tickets` list.
+## 2. Solving SharePoint field-reference issues
 
-Core fields include Issue, Issue description, Quick steps, Priority, Status, Assigned to, Requester, Category, Associated files, Related issue, Resolution, Resolved Date, SLA Due Date, and SLA Reminder Sent.
+### Renamed Title field
 
-Created operational views for Open Tickets, My Tickets, and Critical Tickets.
+The SharePoint `Title` column was renamed to `Issue`. The first notification email showed a blank issue because Power Automate continued to expose the underlying field as `Title`.
 
-## 2. Flow 1 — New Ticket Notification
+**Fix:** Use the underlying `Title` dynamic content for the ticket issue.
 
-**Trigger:** SharePoint — When an item is created
+**Result:** The next test populated the issue correctly.
 
-**Action:** Outlook — Send an email (V2) to the assigned technician.
+**Key lesson:** Display names in SharePoint are not always the same as the field references exposed to Power Automate.
 
-### Roadblock: renamed Title field
+### Choice-field values
 
-The default SharePoint `Title` column was renamed to `Issue`. The first test produced an email with a blank Issue value because Power Automate still exposed the underlying field as `Title`.
+The critical-ticket flow initially did not route correctly because the Choice field was not being referenced as expected.
 
-### Resolution
+**Fix:** Use the Choice field's `Value` representation when evaluating the priority.
 
-The notification was changed to use the `Title` dynamic content for the Issue value.
+**Result:** The critical branch executed and sent the expected high-importance notification.
 
-### Result
+## 3. Building reliable SLA monitoring
 
-A second test populated the issue correctly.
+The SLA workflow runs every hour and processes only tickets that are eligible for an overdue check.
 
-**Lesson:** SharePoint display names and underlying field references are not always identical.
+The first implementation attempted to compare a blank SLA Due Date with the current time and failed with a `Null` versus `String` type mismatch.
 
-## 3. Flow 2 — Critical Ticket Escalation
-
-**Trigger:** SharePoint — When an item is created
-
-**Condition:** Priority Value equals `Critical`
-
-**Action:** High-importance Outlook email to the assigned technician.
-
-### Roadblock
-
-The original condition did not correctly reference the Choice field value, so the expected escalation path did not execute.
-
-### Resolution
-
-The condition was corrected to compare the Priority Choice value with `Critical`.
-
-The `Test - Critical Escalation 2` ticket was used to validate the corrected branch.
-
-### Result
-
-The critical branch executed and delivered the expected email.
-
-**Lesson:** Choice fields should be validated using their actual runtime value representation.
-
-## 4. Flow 3 — SLA Overdue Reminder
-
-**Trigger:** Recurrence — every 1 hour
-
-The flow retrieves tickets, processes them with `Apply to each`, checks the SLA deadline, sends a reminder when overdue, and updates the reminder flag.
-
-### Roadblock: null SLA dates
-
-The first SLA implementation attempted to compare a blank SLA Due Date with the current time. Power Automate returned a type mismatch involving `Null` and `String`.
-
-### Resolution
-
-The SharePoint `Get items` action was given this OData filter:
+**Fix:** Filter invalid/ineligible records before the comparison:
 
 ```text
 SLADueDate ne null and Status ne 'Completed' and SLAReminderSent eq 0
 ```
 
-The condition then compared timestamps using:
+Then compare timestamps using:
 
 ```text
 ticks(item()?['SLADueDate']) <= ticks(utcNow())
 ```
 
-When an overdue ticket matched, the flow sent the email and updated `SLA Reminder Sent` to `Yes`.
+**Result:** The overdue test ticket successfully passed through retrieval, looping, condition evaluation, email delivery, and SharePoint update. The reminder flag was set to `Yes`.
 
-### Result
+**Key lesson:** Scheduled workflows should validate data before performing date operations and should maintain state to avoid repeated actions.
 
-The overdue test ticket successfully passed through the recurrence, retrieval, loop, condition, email, and update steps.
+## 4. Diagnosing the resolution workflow
 
-**Lesson:** Scheduled flows should defensively filter null data before performing comparisons.
+The resolution notification flow needed to send an email when a ticket changed to `Completed`.
 
-## 5. Flow 4 — Ticket Resolution Notification
+The first condition displayed a broken `?Status.Value` reference and evaluated incorrectly.
 
-**Trigger:** SharePoint — When an item is created or modified
+Instead of continuing to change the visual condition builder blindly, I inspected the trigger output in Power Automate run history.
 
-**Condition:** Status equals `Completed`
-
-**Action:** Outlook — Send an email (V2) to the Requester.
-
-### Roadblock: unresolved Status reference
-
-The first version of the condition showed a broken `?Status.Value` reference. The flow triggered, but the condition did not resolve the SharePoint Choice field correctly.
-
-### Troubleshooting approach
-
-Rather than continuing to guess at the expression, the trigger's raw output was inspected from Power Automate run history.
-
-The runtime output showed:
+The runtime data showed:
 
 ```text
 Status.Value    Completed
 ```
 
-The final working expression became:
+The final expression was:
 
 ```text
 triggerOutputs()?['body/Status/Value']
 ```
 
-with the comparison:
+**Result:** The condition evaluated to True and the requester notification was sent successfully.
 
-```text
-is equal to
-Completed
-```
+A later test also revealed blank Resolution and Resolved Date values. The flow itself had succeeded; the source ticket simply did not contain those values yet. After populating the source record, the notification output was complete.
 
-### Result
+**Key lesson:** Troubleshooting should distinguish between a workflow failure and incomplete source data.
 
-The next test showed:
+## 5. Final outcome
 
-- Trigger — Succeeded
-- Condition — True
-- Send an email (V2) — Succeeded
+The completed solution demonstrates four different automation patterns working against one SharePoint data source:
 
-The requester received the resolution email.
+- **Event-driven notification** for new tickets
+- **Conditional escalation** for critical tickets
+- **Scheduled monitoring** for SLA compliance
+- **State-change notification** when work is completed
 
-### Roadblock: blank Resolution and Resolved Date
-
-The first successful resolution email contained the Issue, Description, Category, and Priority, but Resolution and Resolved Date were blank.
-
-The automation was working; the missing values were caused by the corresponding SharePoint fields being blank on the test record at the time of that run.
-
-The test record was then populated with the resolution and resolved date, and the email body was formatted with cleaner spacing and labels.
-
-**Lesson:** Validate both workflow execution and test data. A successful flow run can still produce incomplete output when source fields are empty.
-
-## 6. Final Architecture
-
-```text
-                    SharePoint Tickets
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-        ▼                  ▼                  ▼
- New ticket          Critical ticket      Completed ticket
-     │                    │                    │
-     ▼                    ▼                    ▼
-Notify Assigned      Escalate Assigned    Notify Requester
-
-                    Scheduled every hour
-                           │
-                           ▼
-                   Get eligible tickets
-                           │
-                           ▼
-                      Apply to each
-                           │
-                           ▼
-                       SLA check
-                           │
-                    Overdue ticket?
-                       /       \
-                     Yes        No
-                      │
-                      ▼
-                 Send reminder
-                      │
-                      ▼
-            SLA Reminder Sent = Yes
-```
-
-## 7. Final Scope Decision
-
-The project originally considered additional Power Platform components. For the portfolio version, the implementation stops at **SharePoint + Power Automate**.
-
-Power Apps, Teams, and Power BI are intentionally out of scope so the repository can demonstrate Power Automate workflow design, runtime troubleshooting, scheduled processing, conditional branching, and end-to-end validation without unnecessary scope expansion.
+The final tests confirmed the expected branches, email actions, and SharePoint updates. More importantly, the build required practical use of Power Automate expressions, SharePoint field behavior, OData filtering, scheduled processing, state management, and run-history debugging.
