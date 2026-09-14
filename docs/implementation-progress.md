@@ -10,20 +10,36 @@
 - Created Open Tickets, My Tickets, and Critical Tickets views.
 - Built and tested the New Ticket Notification flow.
 - Built and tested the Critical Ticket Escalation flow.
-- Created the scheduled SLA Overdue Reminder flow.
+- Built and tested the SLA Overdue Reminder flow.
 - Configured the SLA flow recurrence to run every hour.
-- Configured the SLA flow to retrieve Tickets and process them with Apply to each.
-- Added the initial SLA due-date condition.
+- Added OData filtering to exclude blank SLA dates, completed tickets, and already-reminded tickets.
+- Added timestamp comparison using `ticks()` and `utcNow()`.
+- Built and tested the Ticket Resolution Notification flow.
+- Troubleshot SharePoint Choice-field references using trigger output.
+- Documented implementation roadblocks and resolutions.
+- Prepared the project for public GitHub documentation with sanitized screenshot guidance.
 
-## In Progress
+## Final Scope
 
-- Complete the SLA Overdue Reminder conditions and actions.
-- Test the SLA reminder workflow with an overdue ticket.
+The portfolio implementation is intentionally focused on:
 
-## Next
+- SharePoint
+- Power Automate
+- Outlook notifications
 
-- Build the employee ticket submission experience in Power Apps.
-- Build the technician dashboard.
-- Add Teams integration.
-- Add optional Power BI reporting.
-- Add screenshots and final project documentation.
+Power Apps, Teams, and Power BI are currently out of scope. They are not required to demonstrate the workflow automation objectives of this project.
+
+## Documentation
+
+- [Architecture](architecture.md)
+- [SharePoint Data Model](sharepoint-schema.md)
+- [Power Automate Flows](power-automate-flows.md)
+- [Implementation Journey](implementation-journey.md)
+- [Testing & Validation](testing-and-validation.md)
+- [Screenshot Plan](screenshots.md)
+
+## Final Status
+
+**Core project implementation: Complete.**
+
+Remaining repository work consists only of adding any final sanitized screenshots from the completed tests.
