@@ -1,35 +1,10 @@
 # IT Service Desk Ticket Management & Automation
 
-A portfolio project demonstrating how **Microsoft SharePoint** and **Power Automate** can automate common IT service desk workflows.
+A Microsoft **Power Automate + SharePoint** solution that automates a realistic IT support workflow from ticket creation through resolution.
 
-The goal was not simply to create a ticket list. I designed the solution around a realistic support lifecycle: **ticket creation → technician notification → priority escalation → SLA monitoring → resolution communication**.
+I built this project to demonstrate practical workflow automation rather than simply creating a SharePoint list. The solution handles technician notifications, priority-based escalation, SLA monitoring, and requester communication, with testing and troubleshooting evidence throughout.
 
-## What I Built
-
-| Workflow | What it does |
-|---|---|
-| **New Ticket Notification** | Notifies the assigned technician when a ticket is created. |
-| **Critical Ticket Escalation** | Detects critical-priority tickets and sends an immediate high-importance alert. |
-| **SLA Overdue Reminder** | Runs hourly, identifies eligible overdue tickets, sends a reminder, and records that the reminder was sent. |
-| **Ticket Resolution Notification** | Detects completed tickets and sends the requester the resolution details. |
-
-**Result:** All four workflows were tested end-to-end using sample tickets. Trigger execution, conditional branches, email delivery, and SharePoint updates were validated through Power Automate run history and the SharePoint data source.
-
-## Skills Demonstrated
-
-**Power Automate**  
-Event-driven triggers · Conditions · Scheduled flows · Apply to each · Dynamic content · Expressions · Run-history troubleshooting
-
-**SharePoint**  
-List design · Choice and Person fields · Views · Ticket state management · Data used as a workflow system of record
-
-**Workflow Logic**  
-Priority-based routing · SLA monitoring · Null-data handling · State flags · Conditional notifications · Duplicate-reminder prevention
-
-**Microsoft 365**  
-Outlook email automation · SharePoint integration
-
-## Solution Architecture
+## Architecture
 
 ```text
                          SharePoint Online
@@ -46,10 +21,10 @@ Outlook email automation · SharePoint integration
        New Ticket          Critical Check      Completed Check
        Notification              │                  │
               │             Critical?              │
-              ▼                  │              Completed?
-       Assigned Tech             ▼                  │
-                            Escalation              ▼
-                            Assigned Tech      Requester Notice
+              ▼                  │                  ▼
+       Assigned Tech             ▼          Requester Notice
+                            Escalation
+                            Assigned Tech
 
                          Scheduled Flow
                            Every hour
@@ -71,87 +46,171 @@ Outlook email automation · SharePoint integration
               Mark reminder as sent
 ```
 
-## Technical Decisions
+The **SharePoint Tickets list** acts as the system of record, while Power Automate provides the event-driven and scheduled workflow logic. Outlook delivers the user-facing notifications.
 
-### Event-driven automation for immediate actions
+## What It Does
 
-Ticket creation and status changes use SharePoint triggers so notifications happen as part of the ticket lifecycle rather than through manual checks.
+**1. New Ticket Notification**  
+When a ticket is created, Power Automate notifies the assigned technician with the information needed to begin work.
 
-### Scheduled processing for SLA monitoring
+**2. Critical Ticket Escalation**  
+Critical-priority tickets are detected automatically and generate a high-importance escalation to the assigned technician.
 
-SLA enforcement uses an hourly recurrence because the deadline is time-based rather than event-based. The flow filters eligible records before processing them.
+**3. SLA Overdue Reminder**  
+An hourly scheduled flow identifies unresolved tickets whose SLA deadline has passed, sends a reminder, and records that the reminder has been sent so the same ticket is not repeatedly notified.
+
+**4. Ticket Resolution Notification**  
+When a ticket reaches `Completed`, the requester receives an automated message containing the resolution details and resolved date.
+
+## How to Test
+
+The workflows were validated using synthetic SharePoint tickets representing normal, critical, overdue, and completed scenarios.
+
+| Scenario | Expected result | Result |
+|---|---|---|
+| Standard ticket created | Assigned technician receives notification | Passed |
+| Critical ticket created | High-importance escalation is sent | Passed |
+| Non-critical ticket created | Critical branch is skipped | Passed |
+| Overdue unresolved ticket | Reminder is sent and reminder state is updated | Passed |
+| Completed ticket | Requester receives resolution notification | Passed |
+
+Power Automate run history was used to verify trigger execution, condition results, email actions, and SharePoint updates rather than relying only on the final email output.
+
+## Running the Workflows
+
+The solution runs directly in Microsoft Power Automate using the SharePoint `Tickets` list as its data source.
+
+- **Flows 1, 2, and 4** are event-driven and respond to SharePoint item creation or modification.
+- **Flow 3** runs every hour to evaluate SLA status.
+- Outlook is used for automated technician and requester notifications.
+
+The same test cases can be recreated by creating or modifying records in the SharePoint list and reviewing the resulting Power Automate run history.
+
+## Automation Flows
+
+| Flow | Trigger | Core logic | Outcome |
+|---|---|---|---|
+| New Ticket Notification | Item created | Build notification from ticket data | Technician notified |
+| Critical Ticket Escalation | Item created | Check `Priority = Critical` | High-importance escalation |
+| SLA Overdue Reminder | Every hour | Filter eligible tickets → compare SLA → update reminder state | Overdue ticket escalated once |
+| Ticket Resolution Notification | Item created or modified | Check `Status = Completed` | Requester receives resolution |
+
+## Workflow Logic
+
+### SLA filtering
+
+The scheduled flow filters records before processing them:
 
 ```text
 SLADueDate ne null and Status ne 'Completed' and SLAReminderSent eq 0
 ```
 
-This prevents blank dates, completed tickets, and already-reminded tickets from entering the SLA comparison.
+This keeps blank SLA dates, completed tickets, and already-reminded tickets out of the processing loop.
 
-### Reliable date/time comparison
-
-The SLA condition compares timestamps with `ticks()`:
+### SLA date comparison
 
 ```text
 ticks(item()?['SLADueDate']) <= ticks(utcNow())
 ```
 
-This provides a consistent numeric comparison between the stored SLA deadline and the current UTC time.
+Using timestamp values provides a consistent comparison between the stored deadline and the current UTC time.
 
-### Runtime-driven troubleshooting
+### SharePoint Choice-field handling
 
-When a SharePoint Choice field did not behave as expected through the visual condition builder, I inspected the trigger output in run history instead of continuing to guess at the field reference.
-
-The working Status expression was:
+The resolution workflow ultimately used the runtime field structure returned by SharePoint:
 
 ```text
 triggerOutputs()?['body/Status/Value']
 ```
 
-The key troubleshooting principle was to use **runtime data to determine what the connector actually returned**.
-
-## Testing & Results
-
-The solution was validated against both expected and negative paths.
-
-| Test | Result |
-|---|---|
-| Standard ticket creation | Passed |
-| Critical ticket creation | Passed |
-| Non-critical ticket skips escalation | Passed |
-| Overdue unresolved ticket | Passed |
-| Completed ticket sends requester notification | Passed |
-| SLA reminder flag prevents repeat processing | Validated |
-
-Testing exposed real implementation issues, including SharePoint field references, Choice-field values, null SLA dates, and incomplete source data. Each issue was diagnosed and corrected before final validation.
-
-## Engineering Lessons
-
-- SharePoint display names do not always match the underlying field reference exposed to Power Automate.
-- Choice fields should be validated against their actual runtime structure.
-- Scheduled automations should handle null and ineligible records before performing comparisons.
-- State-tracking fields can prevent duplicate notifications in recurring workflows.
-- A successful flow run does not guarantee complete business output; source data must also be validated.
-- Power Automate run history is a practical debugging tool, not just a success/failure log.
+The expression was identified by inspecting the trigger output in run history after the visual condition reference failed.
 
 ## Project Structure
 
 ```text
-.
+it-service-desk-ticket-management/
 ├── README.md
 ├── .gitignore
 └── docs/
     ├── architecture.md
     ├── implementation-journey.md
     ├── power-automate-flows.md
+    ├── sharepoint-schema.md
     └── testing-and-validation.md
 ```
 
+## Anatomy of a Workflow
+
+The SLA workflow is representative of the project's more advanced automation pattern:
+
+```text
+Recurrence
+    ↓
+Get eligible SharePoint items
+    ↓
+Apply to each ticket
+    ↓
+Is SLA deadline <= current time?
+    ↓
+   Yes
+    ↓
+Send overdue notification
+    ↓
+Set SLA Reminder Sent = Yes
+```
+
+The important part is not the number of actions. The workflow demonstrates **scheduled processing, data filtering, conditional evaluation, date/time expressions, state tracking, and controlled notifications**.
+
+## Why I Built It This Way
+
+A few design decisions demonstrate the reasoning behind the implementation:
+
+**Event-driven triggers for immediate actions.** Ticket creation and completion are events, so SharePoint triggers allow the workflow to respond when the state changes instead of relying on manual checks.
+
+**Scheduled processing for SLA monitoring.** An SLA is time-based, so the overdue check runs on a recurring schedule rather than waiting for another ticket event.
+
+**Filter before processing.** The SLA flow excludes invalid and ineligible records before the loop. This reduces unnecessary processing and prevents null values from reaching the date comparison.
+
+**State tracking for recurring automation.** `SLA Reminder Sent` records whether an overdue notification has already been issued, preventing repeated reminders on subsequent hourly runs.
+
+**Runtime-driven troubleshooting.** When a SharePoint Choice field behaved differently from the visual condition reference, I inspected the actual trigger output and built the condition from the runtime structure.
+
+**End-to-end validation.** I tested both positive and negative paths and checked the actual resulting emails and SharePoint updates, not just whether the flow showed a green status.
+
+## Troubleshooting Highlights
+
+The project required solving several real implementation issues:
+
+- A renamed SharePoint `Title` field initially produced a blank Issue value in the notification email.
+- The Critical escalation condition initially failed to reference the Choice-field value correctly.
+- The SLA comparison failed when blank SLA dates produced a `Null` versus `String` type mismatch.
+- The resolution flow initially contained a broken `?Status.Value` reference.
+- The first resolution email exposed incomplete source data because Resolution and Resolved Date were blank on the test ticket.
+
+Each issue was diagnosed from runtime behavior, corrected, and retested. The detailed troubleshooting path is documented in [Implementation Journey](docs/implementation-journey.md).
+
+## Extending It
+
+The design can be extended without changing the core ticket data model or replacing the existing workflows. Examples include adding additional priority rules, introducing new SLA policies, expanding notification paths, or connecting the ticket data to other Microsoft 365 services.
+
+The current implementation deliberately focuses on the completed **SharePoint + Power Automate** workflow so the portfolio demonstrates depth in automation rather than breadth through unfinished components.
+
+## Lessons Learned
+
+- Built practical experience designing event-driven and scheduled Power Automate workflows.
+- Strengthened understanding of SharePoint as a structured data source for workflow automation.
+- Learned how Choice and Person fields behave when passed between SharePoint and Power Automate.
+- Developed experience using OData filtering and Power Automate expressions for reliable scheduled processing.
+- Learned to use run history and trigger output as primary debugging evidence when connector references behave unexpectedly.
+- Strengthened understanding of state-based automation and preventing duplicate notifications.
+- Improved testing discipline by validating both successful and negative workflow paths.
+
 ## Documentation
 
-- [Architecture](docs/architecture.md) — system design and data flow
-- [Power Automate Flows](docs/power-automate-flows.md) — workflow logic and technical implementation
-- [Implementation Journey](docs/implementation-journey.md) — key troubleshooting decisions and lessons
-- [Testing & Validation](docs/testing-and-validation.md) — scenarios and results
+- [Power Automate Flows](docs/power-automate-flows.md) — detailed workflow implementation
+- [Implementation Journey](docs/implementation-journey.md) — problems, fixes, and technical reasoning
+- [SharePoint Data Model](docs/sharepoint-schema.md) — data model and design rationale
+- [Testing & Validation](docs/testing-and-validation.md) — test scenarios and results
 
 ## Privacy
 
