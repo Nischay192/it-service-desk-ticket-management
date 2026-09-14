@@ -1,36 +1,34 @@
-# SharePoint Schema
+# SharePoint Data Model
 
-## Site
+SharePoint acts as the **system of record** for the service desk. The data model was designed around the information Power Automate needs to route, monitor, and close a ticket.
 
-**Site:** IT Help Desk
+## Core Ticket Data
 
-## Tickets List
+- **Issue & description** — identify and explain the support request.
+- **Priority & status** — drive routing, escalation, and lifecycle decisions.
+- **Assigned to & requester** — identify who owns the ticket and who needs the outcome.
+- **Category** — provides consistent classification for support requests.
+- **Resolution & resolved date** — capture the final outcome communicated to the requester.
 
-The `Tickets` list is the primary data store for service desk requests.
+## SLA & Automation State
 
-| Column | Purpose |
+- **SLA Due Date** — provides the deadline used by the scheduled SLA workflow.
+- **SLA Reminder Sent** — stores workflow state so an overdue ticket is not repeatedly notified on every hourly run.
+
+## Supporting Ticket Context
+
+- **Quick steps** — initial troubleshooting guidance.
+- **Associated files** — supporting evidence or attachments.
+- **Related issue** — reference to another ticket when requests are connected.
+
+## Operational Views
+
+| View | Purpose |
 |---|---|
-| Issue | Ticket title / issue name |
-| Issue description | Detailed description of the problem |
-| Quick steps | Initial troubleshooting steps |
-| Priority | Critical, High, Normal, Low |
-| Status | New, In progress, Completed, Blocked, Duplicate |
-| Assigned to | Technician responsible for the ticket |
-| Requester | Employee who submitted the request |
-| Category | Service category such as Network or Account Access |
-| Associated files | Supporting attachments/files |
-| Related issue | Link/reference to a related ticket |
-| Resolution | Details of the solution provided |
-| Resolved Date | Date the ticket was resolved |
-| SLA Due Date | Deadline used for SLA monitoring |
-| SLA Reminder Sent | Tracks whether the overdue reminder was sent |
+| **Open Tickets** | Focuses technicians on active work. |
+| **My Tickets** | Filters work assigned to the current technician. |
+| **Critical Tickets** | Provides a focused view of high-priority incidents. |
 
-## Views
+## Design Rationale
 
-- **Open Tickets** — active service desk tickets
-- **My Tickets** — tickets assigned to the current technician
-- **Critical Tickets** — tickets where Priority is Critical
-
-## Design Notes
-
-The SharePoint list provides the backend data layer for the Power Platform solution. Person/Group fields are used for technician assignment and requester identification, while choice fields provide consistent ticket priority, status, and category values.
+The important design choice was to make the SharePoint list more than a storage table: its fields represent **workflow state and business rules** used by Power Automate. Choice fields provide consistent values for conditions, Person fields support targeted notifications, and the SLA reminder flag maintains state between scheduled runs.
